@@ -18,5 +18,6 @@ from ._likelihood_optimization import (
 from ._pose_search import (
     HierarchicalSO3GridSearch as HierarchicalSO3GridSearch,
     HierarchicalSO3GridSearchKnownOffsets as HierarchicalSO3GridSearchKnownOffsets,
+    HierarchicalSO3GridSearchStarCentered as HierarchicalSO3GridSearchStarCentered,
 )
 

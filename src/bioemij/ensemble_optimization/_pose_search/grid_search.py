@@ -187,19 +187,20 @@ class HierarchicalSO3GridSearch(eqx.Module):
         )
 
     def _correlation_mask(
-        self, image_config: cxs.BasicImageConfig
+        self, image_config: cxs.BasicImageConfig, center_offset=None
     ) -> Optional[Float[Array, "H W"]]:
-        """`corr_mask`, restricted to offsets within `max_shift_in_angstroms`.
-
-        The cross-correlation image is laid out on the image's own coordinate
-        grid -- zero offset at the box centre -- so the offset a pixel stands for
-        is its physical coordinate.
-        """
+        """Restrict correlation shifts to a radius around center_offset (angstroms)."""
         if self.max_shift_in_angstroms is None:
             return self.corr_mask
         offsets = image_config.get_coordinate_grid(physical=True)
-        within = jnp.linalg.norm(offsets, axis=-1) <= self.max_shift_in_angstroms
-        within = within.astype(offsets.dtype)
+        if center_offset is None:
+            center_offset = jnp.zeros((2,), dtype=offsets.dtype)
+        else:
+            center_offset = jnp.asarray(center_offset, dtype=offsets.dtype)
+        within = (
+            jnp.linalg.norm(offsets - center_offset, axis=-1)
+            <= self.max_shift_in_angstroms
+        ).astype(offsets.dtype)
         return within if self.corr_mask is None else self.corr_mask * within
 
     def __call__(
@@ -212,6 +213,7 @@ class HierarchicalSO3GridSearch(eqx.Module):
         whiten_calculated_images: bool,
         lowpass_filter: Optional[Float[Array, "H W"]] = None,
         highpass_filter: Optional[Float[Array, "H W"]] = None,
+        center_offset=None,
     ) -> cxs.QuaternionPose:
         """Perform the hierarchical SO3 grid search to find the optimal pose.
 
@@ -239,7 +241,7 @@ class HierarchicalSO3GridSearch(eqx.Module):
         """
 
         image = jnp.asarray(image)
-        corr_mask = self._correlation_mask(image_config)
+        corr_mask = self._correlation_mask(image_config, center_offset=center_offset)
         losses, offsets = _loss_for_grid_search(
             self.base_quats,
             volume,
@@ -318,6 +320,10 @@ class HierarchicalSO3GridSearch(eqx.Module):
             )
 
         return optimal_pose
+
+
+class HierarchicalSO3GridSearchStarCentered(HierarchicalSO3GridSearch):
+    """Search rotations and translations constrained near each particle's STAR offset."""
 
 
 class HierarchicalSO3GridSearchKnownOffsets(HierarchicalSO3GridSearch):

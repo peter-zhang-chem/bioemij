@@ -7,6 +7,7 @@ from ...._custom_types import ParticleStackInfo
 from ..._pose_search import (
     HierarchicalSO3GridSearch,
     HierarchicalSO3GridSearchKnownOffsets,
+    HierarchicalSO3GridSearchStarCentered,
 )
 
 
@@ -39,20 +40,34 @@ def _make_image_model_from_gmm_estimate_poses(
     whiten_calculated_images: bool,
     lowpass_filter: Optional[Float[Array, "image_height image_width"]] = None,
     highpass_filter: Optional[Float[Array, "image_height image_width"]] = None,
+    use_star_shift_center: bool = False,
 ) -> cxs.AbstractImageModel:
     if relion_stack["parameters"] is None:
         raise ValueError("relion_stack must have non None 'parameters' field.")
 
-    optimal_pose = pose_grid_search(
-        gmm_volume,
-        observed_image,
-        relion_stack["parameters"]["image_config"],
-        relion_stack["parameters"]["transfer_theory"],
-        whitening_filter,
-        whiten_calculated_images,
-        lowpass_filter,
-        highpass_filter,
-    )
+    if use_star_shift_center:
+        optimal_pose = pose_grid_search(
+            gmm_volume,
+            observed_image,
+            relion_stack["parameters"]["image_config"],
+            relion_stack["parameters"]["transfer_theory"],
+            whitening_filter,
+            whiten_calculated_images,
+            lowpass_filter,
+            highpass_filter,
+            center_offset=relion_stack["parameters"]["pose"].offset_in_angstroms,
+        )
+    else:
+        optimal_pose = pose_grid_search(
+            gmm_volume,
+            observed_image,
+            relion_stack["parameters"]["image_config"],
+            relion_stack["parameters"]["transfer_theory"],
+            whitening_filter,
+            whiten_calculated_images,
+            lowpass_filter,
+            highpass_filter,
+        )
 
     return cxs.make_image_model(
         gmm_volume,
@@ -110,6 +125,7 @@ def make_image_model_from_gmm(
     variances: Float[Array, "n_atoms n_gaussians_per_atom"],
     pose_grid_search: Optional[
         HierarchicalSO3GridSearch | HierarchicalSO3GridSearchKnownOffsets
+        | HierarchicalSO3GridSearchStarCentered
     ],
     whitening_filter: Optional[Float[Array, "image_height image_width"]],
     whiten_calculated_images: bool,
@@ -131,6 +147,18 @@ def make_image_model_from_gmm(
             whiten_calculated_images,
             lowpass_filter,
             highpass_filter,
+        )
+    elif isinstance(pose_grid_search, HierarchicalSO3GridSearchStarCentered):
+        return _make_image_model_from_gmm_estimate_poses(
+            volume,
+            observed_image,
+            relion_stack,
+            pose_grid_search,
+            whitening_filter,
+            whiten_calculated_images,
+            lowpass_filter,
+            highpass_filter,
+            use_star_shift_center=True,
         )
     elif isinstance(pose_grid_search, HierarchicalSO3GridSearch):
         return _make_image_model_from_gmm_estimate_poses(
